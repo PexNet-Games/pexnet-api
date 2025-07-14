@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Discord OAuth Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #5865f2;
+        text-align: center;
+      }
+      .btn {
+        display: inline-block;
+        padding: 12px 24px;
+        background-color: #5865f2;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        margin: 10px 0;
+        transition: background-color 0.3s;
+      }
+      .btn:hover {
+        background-color: #4752c4;
+      }
+      .user-info {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 15px 0;
+      }
+      .avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        margin-right: 15px;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>PexNet API - Discord OAuth2 Test</h1>
+
+      <div id="auth-section">
+        <p>Test Discord OAuth2 authentication:</p>
+        <a href="/api/auth/discord" class="btn">Login with Discord</a>
+      </div>
+
+      <div id="user-section" style="display: none">
+        <h2>User Profile</h2>
+        <div id="user-info" class="user-info"></div>
+        <button
+          onclick="logout()"
+          class="btn"
+          style="background-color: #dc3545"
+        >
+          Logout
+        </button>
+      </div>
+
+      <div>
+        <h2>API Endpoints</h2>
+        <ul>
+          <li>
+            <strong>GET /api/auth/discord</strong> - Start Discord OAuth2 flow
+          </li>
+          <li>
+            <strong>GET /api/auth/discord/callback</strong> - Discord OAuth2
+            callback
+          </li>
+          <li>
+            <strong>GET /api/auth/profile</strong> - Get current user profile
+          </li>
+          <li><strong>POST /api/auth/logout</strong> - Logout current user</li>
+          <li><strong>GET /api/users/i/:id</strong> - Get user by ID</li>
+          <li>
+            <strong>POST /api/users/add</strong> - Create user (requires auth)
+          </li>
+          <li>
+            <strong>PUT /api/users/i/:id</strong> - Update user (requires auth)
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      // Check if user is logged in
+      async function checkAuth() {
+        try {
+          const response = await fetch("/api/auth/profile", {
+            credentials: "include",
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            showUserInfo(data.user);
+          } else {
+            showAuthSection();
+          }
+        } catch (error) {
+          console.error("Auth check failed:", error);
+          showAuthSection();
+        }
+      }
+
+      function showAuthSection() {
+        document.getElementById("auth-section").style.display = "block";
+        document.getElementById("user-section").style.display = "none";
+      }
+
+      function showUserInfo(user) {
+        document.getElementById("auth-section").style.display = "none";
+        document.getElementById("user-section").style.display = "block";
+
+        const avatarImg = user.avatar
+          ? `<img src="${user.avatar}" alt="Avatar" class="avatar">`
+          : '<div class="avatar" style="background-color: #ddd; display: inline-block;"></div>';
+
+        document.getElementById("user-info").innerHTML = `
+                ${avatarImg}
+                <div style="display: inline-block; vertical-align: middle;">
+                    <h3>${user.username}${
+          user.discriminator ? "#" + user.discriminator : ""
+        }</h3>
+                    <p><strong>Discord ID:</strong> ${user.userId}</p>
+                    <p><strong>Email:</strong> ${
+                      user.email || "Not provided"
+                    }</p>
+                    <p><strong>Voice Time:</strong> ${
+                      user.voiceTime
+                    } seconds</p>
+                </div>
+            `;
+      }
+
+      async function logout() {
+        try {
+          const response = await fetch("/api/auth/logout", {
+            method: "POST",
+            credentials: "include",
+          });
+
+          if (response.ok) {
+            showAuthSection();
+          } else {
+            alert("Logout failed");
+          }
+        } catch (error) {
+          console.error("Logout failed:", error);
+          alert("Logout failed");
+        }
+      }
+
+      // Check auth status on page load
+      checkAuth();
+    </script>
+  </body>
+</html>
