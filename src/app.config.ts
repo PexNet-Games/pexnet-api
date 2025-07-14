@@ -11,6 +11,11 @@ export const config = {
 		: process.env.MONGO_URI_PROD || "",
 	environment: process.env.NODE_ENV || "development",
 	port: process.env.PORT || 3000,
+	frontend: {
+		url: isDevelopment
+			? process.env.FRONTEND_URL_DEV || "http://localhost:3001"
+			: process.env.FRONTEND_URL_PROD || "https://yourfrontend.com",
+	},
 	discord: {
 		clientId: process.env.DISCORD_CLIENT_ID || "",
 		clientSecret: process.env.DISCORD_CLIENT_SECRET || "",

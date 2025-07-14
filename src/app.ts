@@ -20,7 +20,7 @@ const app = express();
 app.use(express.json());
 app.use(
 	cors({
-		origin: true, // Allow all origins in development, configure properly for production
+		origin: config.frontend.url, // Use configured frontend URL
 		credentials: true, // Allow cookies to be sent
 	}),
 );

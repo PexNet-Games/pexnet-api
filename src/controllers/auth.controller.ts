@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import passport from "@utils/passport";
 import { LogInfo } from "@utils/logger";
+import { config } from "../app.config";
 
 const loginDiscord = (req: Request, res: Response, next: any) => {
 	LogInfo("Discord OAuth: Initiating authentication");
@@ -9,8 +10,8 @@ const loginDiscord = (req: Request, res: Response, next: any) => {
 
 const discordCallback = (req: Request, res: Response, next: any) => {
 	passport.authenticate("discord", {
-		failureRedirect: "/api/auth/failure",
-		successRedirect: "/api/auth/success",
+		failureRedirect: `${config.frontend.url}/auth/failure`,
+		successRedirect: `${config.frontend.url}/auth/success`,
 	})(req, res, next);
 };
 
@@ -92,6 +93,13 @@ const getProfile = (req: Request, res: Response) => {
 	}
 };
 
+const redirectToFrontend = (req: Request, res: Response) => {
+	const path = (req.query.path as string) || "";
+	const redirectUrl = `${config.frontend.url}${path}`;
+	LogInfo(`Redirecting to frontend: ${redirectUrl}`);
+	res.redirect(redirectUrl);
+};
+
 export default {
 	loginDiscord,
 	discordCallback,
@@ -99,4 +107,5 @@ export default {
 	authFailure,
 	logout,
 	getProfile,
+	redirectToFrontend,
 };

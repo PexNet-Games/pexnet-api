@@ -13,4 +13,7 @@ router.get("/failure", AuthController.authFailure);
 router.get("/profile", AuthController.getProfile);
 router.post("/logout", AuthController.logout);
 
+// Frontend redirect utility
+router.get("/redirect", AuthController.redirectToFrontend);
+
 export default router;
