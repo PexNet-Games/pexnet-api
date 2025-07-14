@@ -1,10 +1,16 @@
 # PexNet API
-🧠 Node.js API for PexNet games with Discord OAuth2 authentication
+🧠 Node.js API for PexNet game6. **Start development server:**
+   ```bash
+   npm run dev
+   ```
+
+7. **Visit the test page:** Discord OAuth2 authentication
 
 ## Features
 
 - **Discord OAuth2 Authentication** - Secure user authentication via Discord
 - **User Management** - Create, read, and update user profiles
+- **Wordle Game Integration** - Complete backend for daily Wordle puzzles
 - **Session Management** - Persistent login sessions
 - **RESTful API** - Clean and organized endpoint structure
 - **TypeScript** - Type-safe development
@@ -30,18 +36,32 @@
    # Edit .env with your Discord OAuth2 credentials and MongoDB connection
    ```
 
-4. **Start development server:**
+4. **Seed Wordle data (recommended):**
+   ```bash
+   npm run seed:wordle
+   ```
+
+5. **Test the API (optional):**
+   ```bash
+   npx ts-node test-wordle-api.ts
+   ```
+
+6. **Start development server:**
    ```bash
    npm run dev
    ```
 
-5. **Visit the test page:**
+6. **Visit the test page:**
    - Open http://localhost:3000 to test Discord authentication
    - API documentation available at http://localhost:3000/api-docs
 
 ## Discord OAuth2 Setup
 
 For detailed Discord OAuth2 setup instructions, see [DISCORD_OAUTH_SETUP.md](./DISCORD_OAUTH_SETUP.md)
+
+## Wordle Integration
+
+For complete Wordle API documentation and integration guide, see [WORDLE_API.md](./WORDLE_API.md)
 
 ## API Endpoints
 
@@ -55,6 +75,13 @@ For detailed Discord OAuth2 setup instructions, see [DISCORD_OAUTH_SETUP.md](./D
 - `POST /api/users/add` - Create user (auth required)
 - `PUT /api/users/i/:id` - Update user (auth required)
 
+### Wordle Game
+- `GET /api/wordle/daily-word` - Get today's word
+- `POST /api/wordle/stats` - Save game statistics (auth required)
+- `GET /api/wordle/stats/:discordId` - Get user statistics
+- `GET /api/wordle/leaderboard` - Get global leaderboard
+- `GET /api/wordle/played-today/:discordId` - Check if user played today
+
 ### Utility
 - `GET /api/ping` - Health check endpoint
 
@@ -64,6 +91,7 @@ For detailed Discord OAuth2 setup instructions, see [DISCORD_OAUTH_SETUP.md](./D
 - `npm run build` - Build for production
 - `npm start` - Start production server
 - `npm run swagger` - Generate Swagger documentation
+- `npm run seed:wordle` - Seed Wordle daily words for testing
 
 ## Tech Stack
 

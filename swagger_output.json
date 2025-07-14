@@ -151,6 +151,23 @@
           }
         }
       }
+    },
+    "/api/auth/redirect": {
+      "get": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
     }
   }
 }

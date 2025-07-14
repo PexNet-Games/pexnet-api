@@ -9,6 +9,7 @@ import passport from "@utils/passport";
 
 import userRoutes from "@routes/user.routes";
 import authRoutes from "@routes/auth.routes";
+import wordleRoutes from "@routes/wordle.routes";
 
 mongoose.set("strictQuery", false);
 mongoose
@@ -20,7 +21,11 @@ const app = express();
 app.use(express.json());
 app.use(
 	cors({
-		origin: config.frontend.url, // Use configured frontend URL
+		origin: [
+			config.frontend.url, // Main hub URL
+			"http://localhost:4200", // Angular dev server (hub)
+			"http://localhost:4201", // Angular dev server (wordle)
+		],
 		credentials: true, // Allow cookies to be sent
 	}),
 );
@@ -53,8 +58,10 @@ app.get("/api/ping", (_req, res) => {
 // Routes
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/wordle", wordleRoutes);
 
 // Swagger
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerFile));
 
 export default app;
+ 
