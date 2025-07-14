@@ -1,0 +1,27 @@
+{
+	"linter": {
+		"rules": {
+			"style": {
+				"useImportType": {
+					"level": "off",
+					"fix": "none"
+				}
+			},
+			"suspicious": {
+				"noExplicitAny": {
+					"level": "off"
+				}
+			},
+			"complexity": {
+				"useLiteralKeys": "off"
+			}
+		}
+	},
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "off"
+			}
+		}
+	}
+}
