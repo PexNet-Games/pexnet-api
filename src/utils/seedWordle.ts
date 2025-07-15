@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import WordleDailyWord from "@models/WordleDailyWord";
 import { config } from "../app.config";
 import { loadFrenchWords } from "./wordSelection";
+import { getFrenchDate } from "./frenchTime";
 
 // Load French words for seeding
 const FRENCH_WORDS = loadFrenchWords();
@@ -138,8 +139,7 @@ async function seedDailyWords() {
 		);
 		console.log(`📊 Total words available: ${wordsToSeed.length}`);
 
-		const seedDate = new Date();
-		seedDate.setUTCHours(0, 0, 0, 0);
+		const seedDate = getFrenchDate();
 		seedDate.setDate(seedDate.getDate() - 30); // Start 30 days ago
 
 		const wordsToInsert = [];
@@ -161,9 +161,8 @@ async function seedDailyWords() {
 		await WordleDailyWord.insertMany(wordsToInsert);
 		console.log(`🎯 Seeded ${wordsToInsert.length} daily words`);
 
-		// Show today's word
-		const today = new Date();
-		today.setUTCHours(0, 0, 0, 0);
+		// Show today's word (using French timezone)
+		const today = getFrenchDate();
 		const todayWord = await WordleDailyWord.findOne({ date: today });
 
 		if (todayWord) {

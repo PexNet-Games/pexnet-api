@@ -8,6 +8,11 @@ import {
 	getRecentWords,
 	selectAvailableWord,
 } from "@utils/wordSelection";
+import {
+	getFrenchDate,
+	getFrenchDateString,
+	toFrenchMidnight,
+} from "@utils/frenchTime";
 
 // Load French words on startup
 const FRENCH_WORDS = loadFrenchWords();
@@ -53,8 +58,8 @@ const FALLBACK_WORDS = [
  */
 export const getDailyWord = async (_req: Request, res: Response) => {
 	try {
-		const today = new Date();
-		today.setUTCHours(0, 0, 0, 0); // Reset to start of day in UTC
+		// Get today's date in French timezone (midnight Paris time)
+		const today = getFrenchDate();
 
 		// Check if we already have a word for today
 		let dailyWord = await WordleDailyWord.findOne({ date: today });
@@ -83,14 +88,14 @@ export const getDailyWord = async (_req: Request, res: Response) => {
 			await dailyWord.save();
 
 			console.log(
-				`📅 Generated new daily word: ${selectedWord} (ID: ${nextWordId})`,
+				`📅 Generated new daily word: ${selectedWord} (ID: ${nextWordId}) for French date: ${getFrenchDateString()}`,
 			);
 			console.log(`🔄 Avoided recent words: [${recentWords.join(", ")}]`);
 		}
 
 		res.json({
 			word: dailyWord.word,
-			date: dailyWord.date.toISOString().split("T")[0], // YYYY-MM-DD format
+			date: getFrenchDateString(), // Always return French date format
 			wordId: dailyWord.wordId,
 		});
 	} catch (error) {
@@ -306,9 +311,8 @@ export const hasPlayedToday = async (req: Request, res: Response) => {
 			});
 		}
 
-		// Get today's word
-		const today = new Date();
-		today.setUTCHours(0, 0, 0, 0);
+		// Get today's word (using French timezone)
+		const today = getFrenchDate();
 
 		const todayWord = await WordleDailyWord.findOne({ date: today });
 		if (!todayWord) {
@@ -360,16 +364,16 @@ async function updateUserStats(
 		userStats.totalWins += 1;
 	}
 
-	// Update streak
-	const today = new Date();
-	today.setUTCHours(0, 0, 0, 0);
+	// Update streak (using French timezone)
+	const today = getFrenchDate();
 	const yesterday = new Date(today);
 	yesterday.setDate(yesterday.getDate() - 1);
 
 	if (solved) {
 		if (
 			!userStats.lastPlayedDate ||
-			userStats.lastPlayedDate.getTime() === yesterday.getTime()
+			toFrenchMidnight(userStats.lastPlayedDate).getTime() ===
+				yesterday.getTime()
 		) {
 			userStats.currentStreak += 1;
 		} else {

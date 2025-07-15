@@ -11,7 +11,9 @@
 		"start:prod": "cross-env NODE_ENV=production node dist/index.js",
 		"swagger": "node src/utils/swagger.js",
 		"seed:wordle": "cross-env NODE_ENV=development ts-node src/utils/seedWordle.ts",
-		"test:wordle": "npx ts-node test-wordle-api.ts"
+		"test:wordle": "npx ts-node test-wordle-api.ts",
+		"create:fake-data": "cross-env NODE_ENV=development ts-node scripts/createFakeData.ts",
+		"test:french-time": "npx ts-node scripts/testFrenchTime.ts"
 	},
 	"keywords": [],
 	"author": "Pexilo",
