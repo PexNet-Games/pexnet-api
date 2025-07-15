@@ -16,12 +16,10 @@ alors
 amant
 amour
 angle
-angle
 annee
 appel
 appui
 apres
-arabe
 arabe
 arbre
 armee
@@ -41,11 +39,9 @@ balle
 banal
 bande
 barre
-barre
 baser
 batir
 baton
-belge
 belge
 beton
 biais
@@ -202,7 +198,6 @@ fonde
 fonds
 force
 foret
-foret
 forme
 forum
 fosse
@@ -277,12 +272,10 @@ juger
 jurer
 juste
 kurde
-kurde
 lampe
 lance
 large
 larme
-latin
 latin
 laver
 lecon
@@ -459,10 +452,8 @@ roman
 rouge
 route
 royal
-royal
 ruine
 rural
-russe
 russe
 sable
 sacre
@@ -476,7 +467,6 @@ score
 seize
 selon
 semer
-serbe
 serbe
 serie
 serre
