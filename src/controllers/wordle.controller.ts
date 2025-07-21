@@ -13,6 +13,10 @@ import {
 	getFrenchDateString,
 	toFrenchMidnight,
 } from "@utils/frenchTime";
+import {
+	generateWordleResultImage,
+	WordleResultData,
+} from "@utils/wordleImageGenerator";
 
 // Load French words on startup
 const FRENCH_WORDS = loadFrenchWords();
@@ -342,6 +346,174 @@ export const hasPlayedToday = async (req: Request, res: Response) => {
 			.json({ success: false, error: "Failed to check play status" });
 	}
 };
+
+/**
+ * Generate Wordle result image and shareable text
+ */
+export const generateResultImage = async (req: Request, res: Response) => {
+	try {
+		const { discordId, wordId, guesses, solved, attempts } = req.body;
+
+		// Validate required fields
+		if (
+			!discordId ||
+			!wordId ||
+			!Array.isArray(guesses) ||
+			solved === undefined ||
+			attempts === undefined
+		) {
+			return res.status(400).json({
+				success: false,
+				error:
+					"Missing required fields: discordId, wordId, guesses, solved, attempts",
+			});
+		}
+
+		// Get the target word
+		const dailyWord = await WordleDailyWord.findOne({ wordId });
+		if (!dailyWord) {
+			return res.status(400).json({
+				success: false,
+				error: "Invalid wordId",
+			});
+		}
+
+		// Get user information
+		const user = await User.findOne({ discordId });
+		if (!user) {
+			return res.status(404).json({
+				success: false,
+				error: "User not found",
+			});
+		}
+
+		// Filter valid guesses
+		const filteredGuesses = guesses.filter(
+			(guess: string) => guess && guess.length === 5,
+		);
+
+		// Prepare data for image generation
+		const resultData: WordleResultData = {
+			guesses: filteredGuesses,
+			targetWord: dailyWord.word,
+			solved,
+			attempts,
+			discordId,
+			username: user.username || "Unknown User",
+			discriminator: user.discriminator ?? undefined,
+			avatar: user.avatar ?? undefined,
+		};
+
+		// Generate image
+		const imageBuffer = await generateWordleResultImage(resultData);
+
+		// Generate shareable text with emojis
+		const shareText = generateShareableText(
+			filteredGuesses,
+			dailyWord.word,
+			dailyWord.wordId,
+			solved,
+			attempts,
+		);
+
+		// Return JSON with both image and text
+		res.json({
+			success: true,
+			image: imageBuffer.toString("base64"),
+			shareText,
+			wordId: dailyWord.wordId,
+			solved,
+			attempts,
+		});
+	} catch (error) {
+		console.error("Error generating result image:", error);
+		res.status(500).json({
+			success: false,
+			error: "Failed to generate result image",
+		});
+	}
+};
+
+/**
+ * Generate shareable text with emoji squares (like original Wordle)
+ */
+function generateShareableText(
+	guesses: string[],
+	targetWord: string,
+	wordId: number,
+	solved: boolean,
+	attempts: number,
+): string {
+	const header = `Pexnet Wordle #${wordId} ${solved ? attempts : "X"}/6`;
+
+	// Generate emoji lines for each guess
+	const emojiLines = guesses.map((guess) => {
+		const letterResults = analyzeGuessForEmoji(
+			guess.toUpperCase(),
+			targetWord.toUpperCase(),
+		);
+		return letterResults
+			.map((result) => {
+				switch (result.status) {
+					case "correct":
+						return "🟩"; // Green square
+					case "present":
+						return "🟨"; // Yellow square
+					case "absent":
+						return "⬛"; // Black square
+					default:
+						return "⬛";
+				}
+			})
+			.join("");
+	});
+
+	// Add website link
+	const footer = "\n🎮 https://pexnet.fr/wordle";
+
+	return [header, "", ...emojiLines, footer].join("\n");
+}
+
+/**
+ * Analyze a guess for emoji generation (reusing image generator logic)
+ */
+function analyzeGuessForEmoji(
+	guess: string,
+	targetWord: string,
+): Array<{ letter: string; status: "correct" | "present" | "absent" }> {
+	const result: Array<{
+		letter: string;
+		status: "correct" | "present" | "absent";
+	}> = [];
+	const targetLetters = targetWord.split("");
+	const guessLetters = guess.split("");
+
+	// First pass: mark correct letters (green)
+	const used = new Array(5).fill(false);
+	for (let i = 0; i < 5; i++) {
+		if (guessLetters[i] === targetLetters[i]) {
+			result[i] = { letter: guessLetters[i], status: "correct" };
+			used[i] = true;
+		} else {
+			result[i] = { letter: guessLetters[i], status: "absent" };
+		}
+	}
+
+	// Second pass: mark present letters (yellow)
+	for (let i = 0; i < 5; i++) {
+		if (result[i].status !== "correct") {
+			for (let j = 0; j < 5; j++) {
+				if (!used[j] && guessLetters[i] === targetLetters[j]) {
+					result[i].status = "present";
+					used[j] = true;
+					break;
+				}
+			}
+		}
+	}
+
+	return result;
+}
 
 /**
  * Helper function to update user aggregate stats

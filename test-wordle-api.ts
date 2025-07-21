@@ -62,6 +62,18 @@ async function runTests() {
 	// Test play status check
 	await testEndpoint("/wordle/played-today/test-discord-id-123");
 
+	// Test result image generation
+	const testResultData = {
+		discordId: "test-discord-id-123",
+		wordId: 1,
+		guesses: ["ADIEU", "SALON", "PIANO"],
+		solved: true,
+		attempts: 3,
+	};
+
+	LogInfo("🎨 Testing result image generation...");
+	await testEndpoint("/wordle/result-image", "POST", testResultData);
+
 	LogInfo("🎯 Test Summary:");
 	console.log("   - All endpoints should return valid JSON responses");
 	console.log("   - Daily word should return a 5-letter word");
@@ -70,6 +82,7 @@ async function runTests() {
 		"   - Leaderboard should return empty array (no users with 5+ games)",
 	);
 	console.log("   - Play status should return hasPlayed: false");
+	console.log("   - Result image should return base64 image and emoji text");
 	console.log("");
 	LogInfo("💡 To fully test, run: npm run seed:wordle");
 	console.log("   Then create some test game data via POST /wordle/stats");

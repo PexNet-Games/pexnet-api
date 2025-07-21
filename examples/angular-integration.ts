@@ -89,123 +89,150 @@ export class WordleApiService {
 	getLeaderboard(limit = 10): Observable<any> {
 		return this.http.get(`${this.API_BASE}/leaderboard?limit=${limit}`);
 	}
+
+	/**
+	 * Generate result image and shareable text
+	 */
+	generateResultImage(data: {
+		discordId: string;
+		wordId: number;
+		guesses: string[];
+		solved: boolean;
+		attempts: number;
+	}): Observable<{
+		success: boolean;
+		image: string; // base64 encoded PNG
+		shareText: string; // formatted text with emojis
+		wordId: number;
+		solved: boolean;
+		attempts: number;
+	}> {
+		return this.http.post<any>(`${this.API_BASE}/result-image`, data);
+	}
 }
 
 /**
  * Example component integration
  */
-/*
+import { Component, OnInit } from "@angular/core";
+
 @Component({
-  selector: 'app-wordle',
-  template: `
-    <div class="wordle-game">
-      <h1>Wordle - {{ currentDate }}</h1>
-      
-      <!-- Game board would go here -->
-      
-      <div class="stats" *ngIf="userStats">
-        <h3>Your Stats</h3>
-        <p>Games Played: {{ userStats.totalGames }}</p>
-        <p>Win Rate: {{ userStats.winPercentage }}%</p>
-        <p>Current Streak: {{ userStats.currentStreak }}</p>
-      </div>
-    </div>
-  `
+	selector: "app-wordle-game",
+	template: `
+		<div class="wordle-game">
+			<!-- Game grid here -->
+			
+			<!-- Result screen -->
+			<div *ngIf="gameCompleted" class="result-screen">
+				<img [src]="'data:image/png;base64,' + resultImage" alt="Wordle Result" />
+				<button class="share-btn" (click)="shareResult()">
+					Share 📱
+				</button>
+				<button class="copy-btn" (click)="copyToClipboard()">
+					Copy Text 📋
+				</button>
+			</div>
+		</div>
+	`,
 })
-export class WordleComponent implements OnInit {
-  currentWord: string = '';
-  wordId: number = 0;
-  currentDate: string = '';
-  userStats: UserStatsResponse | null = null;
-  discordId: string = '';
+export class WordleGameComponent implements OnInit {
+	gameCompleted = false;
+	resultImage = "";
+	shareText = "";
 
-  constructor(private wordleApi: WordleApiService) {}
+	constructor(private wordleService: WordleApiService) {}
 
-  ngOnInit() {
-    // Get Discord ID from parent window or query params
-    this.getDiscordId();
-    
-    // Load today's word and check play status
-    this.loadTodaysWord();
-    this.loadUserStats();
-    this.checkPlayStatus();
-  }
+	ngOnInit() {
+		// Initialize game
+	}
 
-  private getDiscordId() {
-    // Option 1: From query parameters
-    const params = new URLSearchParams(window.location.search);
-    this.discordId = params.get('discordId') || '';
+	// Call this when game is completed
+	onGameComplete(gameData: any) {
+		this.wordleService
+			.generateResultImage({
+				discordId: gameData.discordId,
+				wordId: gameData.wordId,
+				guesses: gameData.guesses,
+				solved: gameData.solved,
+				attempts: gameData.attempts,
+			})
+			.subscribe({
+				next: (response) => {
+					this.resultImage = response.image;
+					this.shareText = response.shareText;
+					this.gameCompleted = true;
+				},
+				error: (error) => {
+					console.error("Error generating result:", error);
+				},
+			});
+	}
 
-    // Option 2: Request from parent window via postMessage
-    if (!this.discordId && window.parent !== window) {
-      window.parent.postMessage({ type: 'REQUEST_USER_DATA' }, '*');
-      
-      window.addEventListener('message', (event) => {
-        if (event.data.type === 'USER_DATA') {
-          this.discordId = event.data.discordId;
-          this.loadUserStats();
-          this.checkPlayStatus();
-        }
-      });
-    }
-  }
+	// Share using Web Share API (mobile-friendly)
+	async shareResult() {
+		if (navigator.share) {
+			try {
+				await navigator.share({
+					title: "Mon résultat Pexnet Wordle",
+					text: this.shareText,
+				});
+			} catch (error) {
+				console.log("Share canceled or failed:", error);
+				this.copyToClipboard(); // Fallback
+			}
+		} else {
+			this.copyToClipboard(); // Fallback for desktop
+		}
+	}
 
-  private loadTodaysWord() {
-    this.wordleApi.getDailyWord().subscribe({
-      next: (response) => {
-        this.currentWord = response.word;
-        this.wordId = response.wordId;
-        this.currentDate = response.date;
-      },
-      error: (error) => console.error('Failed to load daily word:', error)
-    });
-  }
+	// Copy text to clipboard
+	async copyToClipboard() {
+		try {
+			await navigator.clipboard.writeText(this.shareText);
+			// Show toast: "Copié !"
+			alert("Résultat copié dans le presse-papier !");
+		} catch (error) {
+			console.error("Failed to copy:", error);
+			// Fallback: show text in a modal for manual copy
+			this.showCopyModal();
+		}
+	}
 
-  private loadUserStats() {
-    if (!this.discordId) return;
+	// Fallback modal for manual copy
+	showCopyModal() {
+		const modal = prompt(
+			"Copiez ce texte pour partager votre résultat:",
+			this.shareText,
+		);
+	}
 
-    this.wordleApi.getUserStats(this.discordId).subscribe({
-      next: (stats) => this.userStats = stats,
-      error: (error) => console.error('Failed to load user stats:', error)
-    });
-  }
+	// Save game stats (called when user completes a word)
+	saveGame(gameStats: GameStatsRequest) {
+		this.wordleService.saveGameStats(gameStats).subscribe({
+			next: (response) => {
+				console.log("Game saved successfully");
+				// Generate result image after successful save
+				this.onGameComplete(gameStats);
+			},
+			error: (error) => {
+				console.error("Error saving game:", error);
+			},
+		});
+	}
 
-  private checkPlayStatus() {
-    if (!this.discordId) return;
-
-    this.wordleApi.hasPlayedToday(this.discordId).subscribe({
-      next: (status) => {
-        if (status.hasPlayed) {
-          // Show previous game result
-          console.log('User already played today:', status.gameResult);
-        }
-      },
-      error: (error) => console.error('Failed to check play status:', error)
-    });
-  }
-
-  onGameComplete(guesses: string[], solved: boolean, timeToComplete: number) {
-    if (!this.discordId) {
-      console.error('No Discord ID available - cannot save stats');
-      return;
-    }
-
-    const gameStats: GameStatsRequest = {
-      discordId: this.discordId,
-      wordId: this.wordId,
-      attempts: solved ? guesses.length : 0,
-      guesses: guesses,
-      solved: solved,
-      timeToComplete: timeToComplete
-    };
-
-    this.wordleApi.saveGameStats(gameStats).subscribe({
-      next: () => {
-        console.log('Game stats saved successfully');
-        this.loadUserStats(); // Refresh stats
-      },
-      error: (error) => console.error('Failed to save game stats:', error)
-    });
-  }
+	// Check daily status on component init
+	checkDailyStatus(discordId: string) {
+		this.wordleService.hasPlayedToday(discordId).subscribe({
+			next: (status) => {
+				if (status.hasPlayed && status.gameResult) {
+					// User already played today, show results
+					this.onGameComplete({
+						discordId,
+						wordId: 0, // Will be fetched from daily word
+						...status.gameResult,
+					});
+				}
+			},
+		});
+	}
 }
-*/

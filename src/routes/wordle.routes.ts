@@ -5,6 +5,7 @@ import {
 	getUserStats,
 	getLeaderboard,
 	hasPlayedToday,
+	generateResultImage,
 } from "@controllers/wordle.controller";
 import { ensureAuthenticated } from "@middlewares/auth.middleware";
 
@@ -230,5 +231,97 @@ router.get("/leaderboard", getLeaderboard);
  *         description: Server error
  */
 router.get("/played-today/:discordId", hasPlayedToday);
+
+/**
+ * @swagger
+ * /api/wordle/result-image:
+ *   post:
+ *     summary: Generate Wordle result image
+ *     tags: [Wordle]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - discordId
+ *               - wordId
+ *               - guesses
+ *               - solved
+ *               - attempts
+ *             properties:
+ *               discordId:
+ *                 type: string
+ *                 description: Discord user ID
+ *                 example: "123456789012345678"
+ *               wordId:
+ *                 type: number
+ *                 description: ID of the word that was played
+ *                 example: 42
+ *               guesses:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   minLength: 5
+ *                   maxLength: 5
+ *                 description: Array of 5-letter guesses made by the user
+ *                 example: ["ADIEU", "SALON", "PIANO"]
+ *               solved:
+ *                 type: boolean
+ *                 description: Whether the puzzle was solved
+ *                 example: true
+ *               attempts:
+ *                 type: number
+ *                 minimum: 0
+ *                 maximum: 6
+ *                 description: Number of attempts (0 = failed, 1-6 = solved)
+ *                 example: 3
+ *     responses:
+ *       200:
+ *         description: Generated Wordle result with image and shareable text
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 image:
+ *                   type: string
+ *                   format: base64
+ *                   description: Base64 encoded PNG image
+ *                 shareText:
+ *                   type: string
+ *                   description: Formatted text with emoji squares for sharing
+ *                   example: |
+ *                     Pexnet Wordle #42 3/6
+ *
+ *                     🟨⬛🟩⬛⬛
+ *                     🟩🟩🟩⬛⬛
+ *                     🟩🟩🟩🟩🟩
+ *
+ *                     🎮 https://pexnet.fr/wordle
+ *                 wordId:
+ *                   type: number
+ *                   description: ID of the daily word
+ *                   example: 42
+ *                 solved:
+ *                   type: boolean
+ *                   description: Whether the puzzle was solved
+ *                   example: true
+ *                 attempts:
+ *                   type: number
+ *                   description: Number of attempts used
+ *                   example: 3
+ *       400:
+ *         description: Invalid request data
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+router.post("/result-image", generateResultImage);
 
 export default router;
