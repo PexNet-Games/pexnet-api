@@ -243,6 +243,9 @@ router.put("/servers/:serverId/users", updateServerUsers);
  *                           grid:
  *                             type: string
  *                             description: Grille d'emojis du résultat Wordle
+ *                           image:
+ *                             type: string
+ *                             description: Image PNG du résultat Wordle en base64
  *                           attempts:
  *                             type: number
  *                             description: Nombre de tentatives utilisées

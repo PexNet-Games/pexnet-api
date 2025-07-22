@@ -385,6 +385,7 @@ export const getCommonServers = async (req: Request, res: Response) => {
 						username: notification.username,
 						avatar: notification.avatar || undefined,
 						grid: notification.grid,
+						image: notification.image, // Image PNG en base64
 						attempts: notification.attempts,
 						time: notification.time || "0:00",
 						streak: notification.streak,

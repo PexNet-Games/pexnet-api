@@ -7,6 +7,7 @@ const WordlePendingNotificationSchema = new mongoose.Schema(
 		username: { type: String, required: true },
 		avatar: { type: String, required: false },
 		grid: { type: String, required: true }, // Grille avec emojis
+		image: { type: String, required: false }, // Image PNG en base64
 		attempts: { type: Number, required: true, min: 0, max: 6 },
 		time: { type: String, required: false }, // Format "2:34"
 		streak: { type: Number, default: 0 },

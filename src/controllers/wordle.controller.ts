@@ -200,6 +200,30 @@ export const saveGameStats = async (req: Request, res: Response) => {
 			// Générer la grille d'emojis
 			const grid = generateWordleGrid(filteredGuesses, dailyWord.word);
 
+			// Générer l'image PNG pour la notification
+			let imageBase64: string | undefined;
+			try {
+				const resultData: WordleResultData = {
+					guesses: filteredGuesses,
+					targetWord: dailyWord.word,
+					solved: solved || false,
+					attempts,
+					discordId,
+					username: user.username || "Unknown User",
+					discriminator: user.discriminator ?? undefined,
+					avatar: user.avatar ?? undefined,
+				};
+
+				const imageBuffer = await generateWordleResultImage(resultData);
+				imageBase64 = imageBuffer.toString("base64");
+			} catch (imageError) {
+				console.warn(
+					"⚠️ Erreur génération image pour notification:",
+					imageError,
+				);
+				// Continuer sans image si la génération échoue
+			}
+
 			// Créer la notification en attente
 			const pendingNotification = new WordlePendingNotification({
 				discordId,
@@ -207,6 +231,7 @@ export const saveGameStats = async (req: Request, res: Response) => {
 				username: user.username || `User#${discordId.slice(-4)}`,
 				avatar: user.avatar || undefined,
 				grid,
+				image: imageBase64, // Ajouter l'image PNG
 				attempts,
 				time: formatTimeToComplete(timeToComplete),
 				streak: currentStreak,
