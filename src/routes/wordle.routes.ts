@@ -1,243 +1,130 @@
-import express from "express";
-import {
-	getDailyWord,
-	saveGameStats,
-	getUserStats,
-	getLeaderboard,
-	hasPlayedToday,
-	generateResultImage,
-} from "@controllers/wordle.controller";
-import { ensureAuthenticated } from "@middlewares/auth.middleware";
+import { Router } from "express";
+import * as WordleController from "@controllers/wordle.controller";
+import { ensureAuthenticated } from "@middleware/auth.middleware";
+import { ensureGuildsUpToDate } from "@middleware/guildSync.middleware";
 
-const router = express.Router();
+const router = Router();
 
 /**
  * @swagger
  * components:
  *   schemas:
- *     DailyWord:
- *       type: object
- *       properties:
- *         word:
- *           type: string
- *           description: The 5-letter word for today
- *         date:
- *           type: string
- *           format: date
- *           description: The date for this word (YYYY-MM-DD)
- *         wordId:
- *           type: number
- *           description: Sequential ID for the daily word
- *     GameStats:
+ *     WordleGameSubmission:
  *       type: object
  *       required:
  *         - discordId
- *         - wordId
+ *         - word
  *         - attempts
- *         - guesses
+ *         - dailyWordId
  *       properties:
  *         discordId:
  *           type: string
- *           description: Discord user ID
- *         wordId:
- *           type: number
- *           description: ID of the word being played
+ *           description: Discord ID de l'utilisateur
+ *         word:
+ *           type: string
+ *           description: Mot deviné par l'utilisateur
  *         attempts:
- *           type: number
- *           minimum: 0
- *           maximum: 6
- *           description: Number of attempts (0 = failed, 1-6 = solved)
- *         guesses:
  *           type: array
  *           items:
- *             type: string
- *           description: Array of 5-letter guesses
- *         solved:
- *           type: boolean
- *           description: Whether the puzzle was solved
- *         timeToComplete:
- *           type: number
- *           description: Time to complete in milliseconds
- *     UserStats:
- *       type: object
- *       properties:
- *         totalGames:
- *           type: number
- *         totalWins:
- *           type: number
- *         winPercentage:
- *           type: number
- *         currentStreak:
- *           type: number
- *         maxStreak:
- *           type: number
- *         guessDistribution:
- *           type: object
- *         lastPlayedDate:
+ *             type: object
+ *             properties:
+ *               word:
+ *                 type: string
+ *               result:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *           description: Historique des tentatives
+ *         dailyWordId:
  *           type: string
- *           format: date
+ *           description: ID du mot du jour
+ *         won:
+ *           type: boolean
+ *           description: Si l'utilisateur a gagné
+ *         attemptsCount:
+ *           type: number
+ *           description: Nombre de tentatives utilisées
  */
 
 /**
  * @swagger
  * /api/wordle/daily-word:
  *   get:
- *     summary: Get today's Wordle word
+ *     summary: Obtenir le mot du jour
  *     tags: [Wordle]
  *     responses:
  *       200:
- *         description: Today's word
+ *         description: Mot du jour récupéré avec succès
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/DailyWord'
- *       500:
- *         description: Server error
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     word:
+ *                       type: string
+ *                     date:
+ *                       type: string
+ *                       format: date
  */
-router.get("/daily-word", getDailyWord);
+router.get("/daily-word", WordleController.getDailyWord);
 
 /**
  * @swagger
- * /api/wordle/stats:
+ * /api/wordle/submit-game:
  *   post:
- *     summary: Save game statistics
+ *     summary: Soumettre un résultat de partie Wordle
  *     tags: [Wordle]
  *     security:
  *       - sessionAuth: []
+ *     description: Soumet les résultats d'une partie Wordle et synchronise automatiquement les guilds Discord pour l'envoi des flux
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/GameStats'
+ *             $ref: '#/components/schemas/WordleGameSubmission'
  *     responses:
  *       200:
- *         description: Stats saved successfully
- *       400:
- *         description: Invalid request data
- *       409:
- *         description: User already played this word
- *       500:
- *         description: Server error
- */
-router.post("/stats", ensureAuthenticated, saveGameStats);
-
-/**
- * @swagger
- * /api/wordle/stats/{discordId}:
- *   get:
- *     summary: Get user statistics
- *     tags: [Wordle]
- *     parameters:
- *       - in: path
- *         name: discordId
- *         required: true
- *         schema:
- *           type: string
- *         description: Discord user ID
- *     responses:
- *       200:
- *         description: User statistics
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/UserStats'
- *       400:
- *         description: Invalid Discord ID
- *       500:
- *         description: Server error
- */
-router.get("/stats/:discordId", getUserStats);
-
-/**
- * @swagger
- * /api/wordle/leaderboard:
- *   get:
- *     summary: Get global leaderboard
- *     tags: [Wordle]
- *     parameters:
- *       - in: query
- *         name: limit
- *         schema:
- *           type: number
- *           default: 10
- *         description: Number of top users to return
- *     responses:
- *       200:
- *         description: Global leaderboard
+ *         description: Partie soumise avec succès
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 users:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       discordId:
- *                         type: string
- *                       username:
- *                         type: string
- *                       winPercentage:
- *                         type: number
- *                       currentStreak:
- *                         type: number
- *                       totalGames:
- *                         type: number
- *       500:
- *         description: Server error
- */
-router.get("/leaderboard", getLeaderboard);
-
-/**
- * @swagger
- * /api/wordle/played-today/{discordId}:
- *   get:
- *     summary: Check if user has played today
- *     tags: [Wordle]
- *     parameters:
- *       - in: path
- *         name: discordId
- *         required: true
- *         schema:
- *           type: string
- *         description: Discord user ID
- *     responses:
- *       200:
- *         description: Play status for today
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 hasPlayed:
+ *                 success:
  *                   type: boolean
- *                 gameResult:
+ *                 message:
+ *                   type: string
+ *                 data:
  *                   type: object
- *                   nullable: true
- *                   properties:
- *                     attempts:
- *                       type: number
- *                     solved:
- *                       type: boolean
- *                     guesses:
- *                       type: array
- *                       items:
- *                         type: string
  *       400:
- *         description: Invalid Discord ID
+ *         description: Données invalides
+ *       401:
+ *         description: Utilisateur non authentifié
  *       500:
- *         description: Server error
+ *         description: Erreur serveur
  */
-router.get("/played-today/:discordId", hasPlayedToday);
+router.post(
+	"/submit-game",
+	ensureAuthenticated,
+	ensureGuildsUpToDate,
+	WordleController.saveGameStats,
+);
 
 /**
  * @swagger
  * /api/wordle/result-image:
  *   post:
- *     summary: Generate Wordle result image
+ *     summary: Générer une image de résultat Wordle
  *     tags: [Wordle]
+ *     description: Génère une image de résultat Wordle avec le texte partageable
  *     requestBody:
  *       required: true
  *       content:
@@ -253,33 +140,24 @@ router.get("/played-today/:discordId", hasPlayedToday);
  *             properties:
  *               discordId:
  *                 type: string
- *                 description: Discord user ID
- *                 example: "123456789012345678"
+ *                 description: Discord ID de l'utilisateur
  *               wordId:
  *                 type: number
- *                 description: ID of the word that was played
- *                 example: 42
+ *                 description: ID du mot Wordle
  *               guesses:
  *                 type: array
  *                 items:
  *                   type: string
- *                   minLength: 5
- *                   maxLength: 5
- *                 description: Array of 5-letter guesses made by the user
- *                 example: ["ADIEU", "SALON", "PIANO"]
+ *                 description: Liste des mots tentés
  *               solved:
  *                 type: boolean
- *                 description: Whether the puzzle was solved
- *                 example: true
+ *                 description: Partie réussie ou non
  *               attempts:
  *                 type: number
- *                 minimum: 0
- *                 maximum: 6
- *                 description: Number of attempts (0 = failed, 1-6 = solved)
- *                 example: 3
+ *                 description: Nombre de tentatives utilisées
  *     responses:
  *       200:
- *         description: Generated Wordle result with image and shareable text
+ *         description: Image et texte générés avec succès
  *         content:
  *           application/json:
  *             schema:
@@ -287,41 +165,70 @@ router.get("/played-today/:discordId", hasPlayedToday);
  *               properties:
  *                 success:
  *                   type: boolean
- *                   example: true
  *                 image:
  *                   type: string
- *                   format: base64
- *                   description: Base64 encoded PNG image
+ *                   description: Image encodée en base64
  *                 shareText:
  *                   type: string
- *                   description: Formatted text with emoji squares for sharing
- *                   example: |
- *                     Pexnet Wordle #42 3/6
- *
- *                     🟨⬛🟩⬛⬛
- *                     🟩🟩🟩⬛⬛
- *                     🟩🟩🟩🟩🟩
- *
- *                     🎮 https://pexnet.fr/wordle
+ *                   description: Texte partageable avec emojis
  *                 wordId:
  *                   type: number
- *                   description: ID of the daily word
- *                   example: 42
  *                 solved:
  *                   type: boolean
- *                   description: Whether the puzzle was solved
- *                   example: true
  *                 attempts:
  *                   type: number
- *                   description: Number of attempts used
- *                   example: 3
  *       400:
- *         description: Invalid request data
+ *         description: Données manquantes ou invalides
  *       404:
- *         description: User not found
+ *         description: Utilisateur ou mot non trouvé
  *       500:
- *         description: Server error
+ *         description: Erreur lors de la génération de l'image
  */
-router.post("/result-image", generateResultImage);
+router.post("/result-image", WordleController.generateResultImage);
+
+/**
+ * @swagger
+ * /api/wordle/user-stats/{discordId}:
+ *   get:
+ *     summary: Obtenir les statistiques d'un utilisateur
+ *     tags: [Wordle]
+ *     parameters:
+ *       - in: path
+ *         name: discordId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Discord ID de l'utilisateur
+ *     responses:
+ *       200:
+ *         description: Statistiques récupérées avec succès
+ *       404:
+ *         description: Utilisateur non trouvé
+ */
+router.get("/user-stats/:discordId", WordleController.getUserStats);
+
+/**
+ * @swagger
+ * /api/wordle/leaderboard:
+ *   get:
+ *     summary: Obtenir le classement général ou par serveur
+ *     tags: [Wordle]
+ *     parameters:
+ *       - in: query
+ *         name: serverId
+ *         schema:
+ *           type: string
+ *         description: ID du serveur Discord (optionnel)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Nombre d'utilisateurs à retourner
+ *     responses:
+ *       200:
+ *         description: Classement récupéré avec succès
+ */
+router.get("/leaderboard", WordleController.getLeaderboard);
 
 export default router;

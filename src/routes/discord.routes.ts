@@ -4,9 +4,11 @@ import {
 	leaveServer,
 	updateServerUsers,
 	getCommonServers,
+	getActiveUsersWithNotifications,
 	setWordleChannel,
 	getActiveServers,
 	notifyGameResult,
+	markNotificationsAsProcessed,
 	getWordleServers,
 	getWordleNotificationStatus,
 	forceWordleSyncServers,
@@ -201,8 +203,9 @@ router.put("/servers/:serverId/users", updateServerUsers);
  * @swagger
  * /api/discord/users/{discordId}/common-servers:
  *   get:
- *     summary: Obtenir les serveurs communs entre le bot et un utilisateur
- *     tags: [Discord]
+ *     summary: Obtenir les serveurs avec notifications Wordle en attente
+ *     tags: [Discord - Notifications]
+ *     description: Récupère les serveurs communs avec leurs notifications Wordle en attente pour l'utilisateur spécifié. Format utilisé par le WordleNotificationJob du bot Discord.
  *     parameters:
  *       - in: path
  *         name: discordId
@@ -212,7 +215,75 @@ router.put("/servers/:serverId/users", updateServerUsers);
  *         description: ID Discord de l'utilisateur
  *     responses:
  *       200:
- *         description: Liste des serveurs communs
+ *         description: Serveurs avec notifications en attente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 servers:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       serverId:
+ *                         type: string
+ *                         description: ID du serveur Discord
+ *                       channelId:
+ *                         type: string
+ *                         description: ID du canal Wordle configuré
+ *                       notificationData:
+ *                         type: object
+ *                         properties:
+ *                           username:
+ *                             type: string
+ *                           avatar:
+ *                             type: string
+ *                             description: URL de l'avatar utilisateur
+ *                           grid:
+ *                             type: string
+ *                             description: Grille d'emojis du résultat Wordle
+ *                           attempts:
+ *                             type: number
+ *                             description: Nombre de tentatives utilisées
+ *                           time:
+ *                             type: string
+ *                             description: Temps de completion (format MM:SS)
+ *                           streak:
+ *                             type: number
+ *                             description: Série actuelle du joueur
+ *                           puzzle:
+ *                             type: number
+ *                             description: Numéro du puzzle Wordle
+ *                           date:
+ *                             type: string
+ *                             description: Date du jeu (format YYYY-MM-DD)
+ *                           solved:
+ *                             type: boolean
+ *                             description: Partie réussie ou non
+ *                           timeToComplete:
+ *                             type: number
+ *                             description: Temps en millisecondes
+ *                           notificationId:
+ *                             type: string
+ *                             description: ID de la notification à marquer comme traitée
+ *       400:
+ *         description: discordId manquant
+ *       500:
+ *         description: Erreur serveur
+ */
+router.get("/users/:discordId/common-servers", getCommonServers);
+
+/**
+ * @swagger
+ * /api/discord/users/active-with-notifications:
+ *   get:
+ *     summary: Obtenir les utilisateurs avec notifications Wordle en attente
+ *     tags: [Discord - Notifications]
+ *     description: Récupère la liste des IDs Discord des utilisateurs qui ont des notifications Wordle non traitées. Utilisé par le bot Discord pour savoir quels utilisateurs traiter.
+ *     responses:
+ *       200:
+ *         description: Liste des utilisateurs avec notifications en attente
  *         content:
  *           application/json:
  *             schema:
@@ -220,20 +291,64 @@ router.put("/servers/:serverId/users", updateServerUsers);
  *               properties:
  *                 success:
  *                   type: boolean
- *                 discordId:
- *                   type: string
- *                 commonServers:
+ *                 users:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/CommonServer'
- *                 totalCommon:
+ *                     type: string
+ *                   description: Liste des Discord IDs avec notifications en attente
+ *                 count:
  *                   type: number
- *       400:
- *         description: discordId manquant
+ *                   description: Nombre d'utilisateurs avec notifications
  *       500:
  *         description: Erreur serveur
  */
-router.get("/users/:discordId/common-servers", getCommonServers);
+router.get("/users/active-with-notifications", getActiveUsersWithNotifications);
+
+/**
+ * @swagger
+ * /api/discord/notifications/processed:
+ *   post:
+ *     summary: Marquer des notifications comme traitées
+ *     tags: [Discord - Notifications]
+ *     description: Marque les notifications spécifiées comme traitées après leur envoi par le bot Discord
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - notificationIds
+ *             properties:
+ *               notificationIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Liste des IDs de notifications à marquer comme traitées
+ *     responses:
+ *       200:
+ *         description: Notifications marquées comme traitées avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 processed:
+ *                   type: number
+ *                   description: Nombre de notifications réellement traitées
+ *                 requested:
+ *                   type: number
+ *                   description: Nombre de notifications demandées
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Données manquantes ou invalides
+ *       500:
+ *         description: Erreur serveur
+ */
+router.post("/notifications/processed", markNotificationsAsProcessed);
 
 /**
  * @swagger

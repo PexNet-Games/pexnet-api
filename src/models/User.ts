@@ -13,6 +13,14 @@ const User = new mongoose.Schema(
 		avatar: { type: String, required: false },
 		accessToken: { type: String, required: false },
 		refreshToken: { type: String, required: false },
+		// Discord guilds (servers) where the user is a member
+		guilds: [
+			{
+				type: String, // Guild ID
+				required: false,
+			},
+		],
+		guildsLastSync: { type: Date, required: false }, // Timestamp of last guild sync
 	},
 	{
 		timestamps: true,

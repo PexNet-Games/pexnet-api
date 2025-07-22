@@ -15,6 +15,9 @@
 		"test:discord": "npx ts-node test-discord-api.ts",
 		"test:discord-bot-connection": "node test-discord-bot-connection.js",
 		"test:discord-endpoints": "node test-all-discord-endpoints.js",
+		"test:user-guilds": "node test-user-guilds.js",
+		"test:auto-sync": "node test-auto-guild-sync.js",
+		"test:complete-flow": "node test-complete-guild-flow.js",
 		"create:fake-data": "cross-env NODE_ENV=development ts-node scripts/createFakeData.ts",
 		"test:french-time": "npx ts-node scripts/testFrenchTime.ts"
 	},

@@ -4,6 +4,7 @@ import DiscordServer from "@models/DiscordServer";
 import DiscordUserServer from "@models/DiscordUserServer";
 import WordleGameStats from "@models/WordleGameStats";
 import WordleDailyWord from "@models/WordleDailyWord";
+import WordlePendingNotification from "@models/WordlePendingNotification";
 import User from "@models/User";
 import { generateWordleResultImage } from "@utils/wordleImageGenerator";
 
@@ -321,7 +322,8 @@ export const updateServerUsers = async (req: Request, res: Response) => {
 };
 
 /**
- * Obtenir les serveurs communs entre le bot et un utilisateur
+ * Obtenir les serveurs communs avec notifications en attente pour un utilisateur
+ * Format attendu par le bot Discord pour le WordleNotificationJob
  */
 export const getCommonServers = async (req: Request, res: Response) => {
 	try {
@@ -334,38 +336,83 @@ export const getCommonServers = async (req: Request, res: Response) => {
 			});
 		}
 
-		// Récupérer tous les serveurs où l'utilisateur est présent
-		const userServers = await DiscordUserServer.find({
+		// Récupérer l'utilisateur et vérifier ses guilds
+		const user = await User.findOne({ discordId }).select(
+			"guilds guildsLastSync username",
+		);
+
+		if (!user || !user.guilds || user.guilds.length === 0) {
+			return res.json({
+				servers: [], // Format attendu par le bot Discord
+			});
+		}
+
+		// Récupérer les notifications en attente pour cet utilisateur
+		const pendingNotifications = await WordlePendingNotification.find({
 			discordId,
-			isActive: true,
-		}).select("serverId serverName");
+			isProcessed: false,
+		});
 
-		const serverIds = userServers.map((us) => us.serverId);
+		if (pendingNotifications.length === 0) {
+			return res.json({
+				servers: [],
+			});
+		}
 
-		// Récupérer les informations complètes des serveurs où le bot est aussi actif
+		// Récupérer les serveurs communs avec canal Wordle configuré
 		const commonServers = await DiscordServer.find({
-			serverId: { $in: serverIds },
+			serverId: { $in: user.guilds },
 			isActive: true,
-		}).select("serverId serverName wordleChannelId settings");
+			wordleChannelId: { $exists: true, $ne: null },
+			"settings.autoNotify": { $ne: false },
+		}).select("serverId wordleChannelId");
+
+		if (commonServers.length === 0) {
+			return res.json({
+				servers: [],
+			});
+		}
+
+		// Construire la réponse dans le format attendu par le bot Discord
+		const servers = [];
+
+		for (const server of commonServers) {
+			for (const notification of pendingNotifications) {
+				servers.push({
+					serverId: server.serverId,
+					channelId: server.wordleChannelId,
+					notificationData: {
+						username: notification.username,
+						avatar: notification.avatar || undefined,
+						grid: notification.grid,
+						attempts: notification.attempts,
+						time: notification.time || "0:00",
+						streak: notification.streak,
+						puzzle: notification.puzzle,
+						date: notification.date,
+						solved: notification.solved,
+						timeToComplete: notification.timeToComplete,
+						// ID de la notification pour la marquer comme traitée
+						notificationId: notification._id.toString(),
+					},
+				});
+			}
+		}
+
+		console.log(
+			`📤 ${servers.length} notifications envoyées pour ${user.username || discordId} vers ${commonServers.length} serveurs`,
+		);
 
 		res.json({
-			success: true,
-			discordId,
-			commonServers: commonServers.map((server) => ({
-				serverId: server.serverId,
-				serverName: server.serverName,
-				wordleChannelId: server.wordleChannelId,
-				autoNotify: server.settings?.autoNotify ?? true,
-			})),
-			totalCommon: commonServers.length,
+			servers,
 		});
 	} catch (error) {
 		console.error(
-			"Erreur lors de la récupération des serveurs communs:",
+			"Erreur lors de la récupération des serveurs avec notifications:",
 			error,
 		);
 		res.status(500).json({
-			success: false,
+			servers: [],
 			error: "Erreur interne du serveur",
 		});
 	}
@@ -450,19 +497,22 @@ export const notifyGameResult = async (req: Request, res: Response) => {
 			});
 		}
 
-		// Récupérer les serveurs communs
-		const userServers = await DiscordUserServer.find({
-			discordId,
-			isActive: true,
-		}).select("serverId");
+		// Récupérer l'utilisateur et ses guilds Discord
+		const user = await User.findOne({ discordId });
+		if (!user || !user.guilds || user.guilds.length === 0) {
+			return res.json({
+				success: true,
+				message: "Utilisateur non trouvé ou aucun serveur Discord",
+				serversToNotify: 0,
+			});
+		}
 
-		const serverIds = userServers.map((us) => us.serverId);
-
+		// Récupérer les serveurs communs directement depuis User.guilds et DiscordServer
 		const commonServers = await DiscordServer.find({
-			serverId: { $in: serverIds },
+			serverId: { $in: user.guilds },
 			isActive: true,
 			wordleChannelId: { $exists: true, $ne: null },
-			"settings.autoNotify": true,
+			"settings.autoNotify": { $ne: false }, // Autorise true ou undefined (par défaut)
 		});
 
 		if (commonServers.length === 0) {
@@ -482,8 +532,7 @@ export const notifyGameResult = async (req: Request, res: Response) => {
 			});
 		}
 
-		// Récupérer les informations utilisateur pour l'image
-		const user = await User.findOne({ discordId });
+		// Préparer les données pour les guesses
 		const filteredGuesses = (guesses || []).filter(
 			(guess: string) => guess && guess.length === 5,
 		);
@@ -867,6 +916,98 @@ export const testDiscordBotConnection = async (req: Request, res: Response) => {
 		res.status(200).json({
 			...errorResponse,
 			status: "disconnected",
+		});
+	}
+};
+
+/**
+ * Marquer des notifications comme traitées
+ * Appelé par le bot Discord après l'envoi des notifications
+ */
+export const markNotificationsAsProcessed = async (
+	req: Request,
+	res: Response,
+) => {
+	try {
+		const { notificationIds } = req.body;
+
+		if (!Array.isArray(notificationIds) || notificationIds.length === 0) {
+			return res.status(400).json({
+				success: false,
+				error: "notificationIds (array) est requis et ne doit pas être vide",
+			});
+		}
+
+		// Marquer les notifications comme traitées
+		const result = await WordlePendingNotification.updateMany(
+			{
+				_id: { $in: notificationIds },
+				isProcessed: false,
+			},
+			{
+				$set: {
+					isProcessed: true,
+					processedAt: new Date(),
+				},
+			},
+		);
+
+		console.log(
+			`✅ ${result.modifiedCount}/${notificationIds.length} notifications marquées comme traitées`,
+		);
+
+		res.json({
+			success: true,
+			processed: result.modifiedCount,
+			requested: notificationIds.length,
+			message: `${result.modifiedCount} notifications traitées avec succès`,
+		});
+	} catch (error) {
+		console.error("Erreur lors du marquage des notifications:", error);
+		res.status(500).json({
+			success: false,
+			error: "Erreur interne du serveur",
+		});
+	}
+};
+
+/**
+ * Obtenir la liste des utilisateurs avec des notifications en attente
+ * Utilisé par le bot Discord pour savoir quels utilisateurs traiter
+ */
+export const getActiveUsersWithNotifications = async (
+	req: Request,
+	res: Response,
+) => {
+	try {
+		// Récupérer tous les discordId qui ont des notifications non traitées
+		const activeUsers = await WordlePendingNotification.distinct("discordId", {
+			isProcessed: false,
+			expiresAt: { $gt: new Date() }, // Pas expirées
+		});
+
+		// Ne logger que s'il y a des utilisateurs avec notifications
+		if (activeUsers.length > 0) {
+			console.log(
+				`📋 ${activeUsers.length} utilisateur(s) avec notifications en attente`,
+			);
+		}
+
+		res.json({
+			success: true,
+			users: activeUsers,
+			count: activeUsers.length,
+		});
+	} catch (error) {
+		console.error(
+			"Erreur lors de la récupération des utilisateurs actifs:",
+			error,
+		);
+		res.status(500).json({
+			success: false,
+			users: [],
+			count: 0,
+			error: "Erreur interne du serveur",
 		});
 	}
 };

@@ -11,8 +11,7 @@ const WordleDailyWordSchema = new mongoose.Schema(
 	},
 );
 
-// Create index for efficient date queries
-WordleDailyWordSchema.index({ date: 1 });
-WordleDailyWordSchema.index({ wordId: 1 });
+// Les index sur date et wordId sont automatiquement créés par unique: true
+// Pas besoin de les redéfinir ici
 
 export default mongoose.model("WordleDailyWord", WordleDailyWordSchema);

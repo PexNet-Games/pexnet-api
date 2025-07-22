@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import WordleDailyWord from "@models/WordleDailyWord";
 import WordleGameStats from "@models/WordleGameStats";
 import WordleUserStats from "@models/WordleUserStats";
+import WordlePendingNotification from "@models/WordlePendingNotification";
 import User from "@models/User";
 import {
 	loadFrenchWords,
@@ -17,7 +18,11 @@ import {
 	generateWordleResultImage,
 	WordleResultData,
 } from "@utils/wordleImageGenerator";
-import { notifyGameResult } from "./discord.controller";
+import {
+	formatTimeToComplete,
+	generateWordleGrid,
+	formatGameDate,
+} from "@utils/wordleNotification";
 
 // Load French words on startup
 const FRENCH_WORDS = loadFrenchWords();
@@ -186,39 +191,43 @@ export const saveGameStats = async (req: Request, res: Response) => {
 		// Update user aggregate stats
 		await updateUserStats(discordId, attempts, solved || false, dailyWord.date);
 
-		// Notifier Discord automatiquement (ne pas bloquer si ça échoue)
+		// Créer une notification en attente pour Discord
 		try {
-			// Créer une fausse requête pour l'appel interne
-			const discordReq = {
-				body: {
-					discordId,
-					wordId,
-					solved: solved || false,
-					attempts,
-					guesses: filteredGuesses,
-				},
-			} as Request;
+			// Récupérer les stats utilisateur pour le streak
+			const userStats = await WordleUserStats.findOne({ discordId });
+			const currentStreak = userStats?.currentStreak || 0;
 
-			// Créer une fausse réponse pour capturer le résultat
-			let notificationResult: any = null;
-			const discordRes = {
-				status: () => ({ json: () => {} }),
-				json: (data: any) => {
-					notificationResult = data;
-				},
-			} as any;
+			// Générer la grille d'emojis
+			const grid = generateWordleGrid(filteredGuesses, dailyWord.word);
 
-			// Appeler la fonction de notification Discord
-			await notifyGameResult(discordReq, discordRes);
+			// Créer la notification en attente
+			const pendingNotification = new WordlePendingNotification({
+				discordId,
+				wordId,
+				username: user.username || `User#${discordId.slice(-4)}`,
+				avatar: user.avatar || undefined,
+				grid,
+				attempts,
+				time: formatTimeToComplete(timeToComplete),
+				streak: currentStreak,
+				puzzle: wordId,
+				date: formatGameDate(dailyWord.date),
+				solved: solved || false,
+				timeToComplete,
+				expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Expire dans 24h
+			});
 
-			if (notificationResult?.success) {
-				console.log(
-					`🎯 Notification Discord envoyée pour ${discordId} (${notificationResult.serversToNotify} serveurs)`,
-				);
-			}
-		} catch (discordError) {
+			await pendingNotification.save();
+
+			console.log(
+				`📬 Notification créée pour ${user.username || discordId} (Wordle #${wordId})`,
+			);
+		} catch (notificationError) {
 			// Log l'erreur mais ne pas faire échouer la sauvegarde principale
-			console.warn("⚠️ Échec de la notification Discord:", discordError);
+			console.warn(
+				"⚠️ Échec de la création de notification:",
+				notificationError,
+			);
 		}
 
 		res.json({ success: true, message: "Game stats saved successfully" });
@@ -423,6 +432,15 @@ export const generateResultImage = async (req: Request, res: Response) => {
 			});
 		}
 
+		// Get game stats from database to retrieve timeToComplete
+		const gameStats = await WordleGameStats.findOne({ discordId, wordId });
+		if (!gameStats) {
+			return res.status(404).json({
+				success: false,
+				error: "Game stats not found for this user and word",
+			});
+		}
+
 		// Filter valid guesses
 		const filteredGuesses = guesses.filter(
 			(guess: string) => guess && guess.length === 5,
@@ -452,7 +470,7 @@ export const generateResultImage = async (req: Request, res: Response) => {
 			attempts,
 		);
 
-		// Return JSON with both image and text
+		// Return JSON with both image and text, including timeToComplete from database
 		res.json({
 			success: true,
 			image: imageBuffer.toString("base64"),
@@ -460,6 +478,7 @@ export const generateResultImage = async (req: Request, res: Response) => {
 			wordId: dailyWord.wordId,
 			solved,
 			attempts,
+			timeToComplete: gameStats.timeToComplete,
 		});
 	} catch (error) {
 		console.error("Error generating result image:", error);

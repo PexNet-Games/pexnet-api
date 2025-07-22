@@ -11,7 +11,7 @@ passport.use(
 			clientID: config.discord.clientId,
 			clientSecret: config.discord.clientSecret,
 			callbackURL: config.discord.callbackUrl,
-			scope: ["identify", "email"],
+			scope: ["identify", "email", "guilds"],
 		},
 		async (
 			accessToken: string,
@@ -84,7 +84,7 @@ passport.serializeUser((user: any, done) => {
 passport.deserializeUser(async (id: string, done) => {
 	try {
 		const user = await User.findById(id);
-		done(null, user);
+		done(null, user as any);
 	} catch (error) {
 		done(error, null);
 	}

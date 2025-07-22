@@ -23,6 +23,6 @@ const DiscordUserServerSchema = new mongoose.Schema(
 DiscordUserServerSchema.index({ discordId: 1, serverId: 1 }, { unique: true });
 DiscordUserServerSchema.index({ discordId: 1, isActive: 1 });
 DiscordUserServerSchema.index({ serverId: 1, isActive: 1 });
-DiscordUserServerSchema.index({ discordId: 1 });
+// L'index sur discordId seul est redondant car les index composés peuvent être utilisés
 
 export default mongoose.model("DiscordUserServer", DiscordUserServerSchema);

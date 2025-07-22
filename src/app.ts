@@ -6,6 +6,7 @@ import cors from "cors";
 import session from "express-session";
 import { config } from "./app.config";
 import passport from "@utils/passport";
+import { autoGuildSyncMiddleware } from "@middleware/guildSync.middleware";
 
 import userRoutes from "@routes/user.routes";
 import authRoutes from "@routes/auth.routes";
@@ -47,6 +48,9 @@ app.use(
 // Passport middleware
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Guild synchronization middleware - détecte les sessions actives et synchronise automatiquement
+app.use(autoGuildSyncMiddleware);
 
 // Serve static files
 app.use(express.static("public"));

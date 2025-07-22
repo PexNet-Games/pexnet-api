@@ -24,7 +24,7 @@ const DiscordServerSchema = new mongoose.Schema(
 );
 
 // Index pour les requêtes fréquentes
-DiscordServerSchema.index({ serverId: 1 });
+// L'index sur serverId est automatiquement créé par unique: true
 DiscordServerSchema.index({ isActive: 1 });
 DiscordServerSchema.index({ wordleChannelId: 1 });
 
