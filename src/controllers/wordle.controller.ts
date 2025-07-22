@@ -17,6 +17,7 @@ import {
 	generateWordleResultImage,
 	WordleResultData,
 } from "@utils/wordleImageGenerator";
+import { notifyGameResult } from "./discord.controller";
 
 // Load French words on startup
 const FRENCH_WORDS = loadFrenchWords();
@@ -184,6 +185,41 @@ export const saveGameStats = async (req: Request, res: Response) => {
 
 		// Update user aggregate stats
 		await updateUserStats(discordId, attempts, solved || false, dailyWord.date);
+
+		// Notifier Discord automatiquement (ne pas bloquer si ça échoue)
+		try {
+			// Créer une fausse requête pour l'appel interne
+			const discordReq = {
+				body: {
+					discordId,
+					wordId,
+					solved: solved || false,
+					attempts,
+					guesses: filteredGuesses,
+				},
+			} as Request;
+
+			// Créer une fausse réponse pour capturer le résultat
+			let notificationResult: any = null;
+			const discordRes = {
+				status: () => ({ json: () => {} }),
+				json: (data: any) => {
+					notificationResult = data;
+				},
+			} as any;
+
+			// Appeler la fonction de notification Discord
+			await notifyGameResult(discordReq, discordRes);
+
+			if (notificationResult?.success) {
+				console.log(
+					`🎯 Notification Discord envoyée pour ${discordId} (${notificationResult.serversToNotify} serveurs)`,
+				);
+			}
+		} catch (discordError) {
+			// Log l'erreur mais ne pas faire échouer la sauvegarde principale
+			console.warn("⚠️ Échec de la notification Discord:", discordError);
+		}
 
 		res.json({ success: true, message: "Game stats saved successfully" });
 	} catch (error) {

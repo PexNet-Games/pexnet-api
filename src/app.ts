@@ -10,6 +10,7 @@ import passport from "@utils/passport";
 import userRoutes from "@routes/user.routes";
 import authRoutes from "@routes/auth.routes";
 import wordleRoutes from "@routes/wordle.routes";
+import discordRoutes from "@routes/discord.routes";
 
 mongoose.set("strictQuery", false);
 mongoose
@@ -59,9 +60,9 @@ app.get("/api/ping", (_req, res) => {
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/wordle", wordleRoutes);
+app.use("/api/discord", discordRoutes);
 
 // Swagger
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerFile));
 
 export default app;
- 

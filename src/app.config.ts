@@ -22,6 +22,15 @@ export const config = {
 		callbackUrl:
 			process.env.DISCORD_CALLBACK_URL ||
 			"http://localhost:3000/api/auth/discord/callback",
+		bot: {
+			apiUrl: isDevelopment
+				? process.env.DISCORD_BOT_API_URL_DEV || "http://localhost:3001"
+				: process.env.DISCORD_BOT_API_URL_PROD || "http://localhost:3001",
+			apiPort: process.env.DISCORD_BOT_API_PORT || "3001",
+			authToken:
+				process.env.DISCORD_BOT_AUTH_TOKEN ||
+				"00000000-0000-0000-0000-000000000000",
+		},
 	},
 	session: {
 		secret: process.env.SESSION_SECRET || "your-session-secret-change-this",
