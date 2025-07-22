@@ -457,6 +457,7 @@ export const getCommonServers = async (req: Request, res: Response) => {
 							solved: notification.solved,
 							timeToComplete: notification.timeToComplete,
 							notificationId: notification._id.toString(),
+							description: `${notification.username} a joué`,
 						},
 					};
 				}
@@ -514,29 +515,55 @@ export const getCommonServers = async (req: Request, res: Response) => {
 							avgAttempts: avgAttempts,
 							// IDs de toutes les notifications à marquer comme traitées
 							notificationIds: notificationIds,
+							description: `${usernames.join(", ")} ont joués`,
 						},
 					};
 				} catch (error) {
 					console.error("Erreur lors de la combinaison des images:", error);
 
-					// En cas d'erreur, retourner la première notification seulement
-					const notification = serverNotifications[0];
+					// Fallback pour groupe avec données de base
+					const usernames = [
+						...new Set(serverNotifications.map((n) => n.username)),
+					];
+					const notificationIds = serverNotifications.map((n) =>
+						n._id.toString(),
+					);
+
+					// Grille combinée avec noms même en fallback
+					const combinedGrid = serverNotifications
+						.map((notif) => `${notif.username}:\n${notif.grid}`)
+						.join("\n\n");
+
+					// Stats groupées même en fallback
+					const totalGames = serverNotifications.length;
+					const solvedGames = serverNotifications.filter(
+						(n) => n.solved,
+					).length;
+					const totalAttempts = serverNotifications.reduce(
+						(sum, n) => sum + n.attempts,
+						0,
+					);
+					const avgAttempts =
+						Math.round((totalAttempts / totalGames) * 10) / 10;
+
 					return {
 						serverId: server.serverId,
 						channelId: server.wordleChannelId,
 						notificationData: {
-							username: notification.username,
-							avatar: notification.avatar || undefined,
-							grid: notification.grid,
-							image: notification.image,
-							attempts: notification.attempts,
-							time: notification.time || "0:00",
-							streak: notification.streak,
-							puzzle: notification.puzzle,
-							date: notification.date,
-							solved: notification.solved,
-							timeToComplete: notification.timeToComplete,
-							notificationId: notification._id.toString(),
+							username: usernames.join(", "),
+							avatar: undefined,
+							grid: combinedGrid,
+							image: undefined, // Pas d'image en fallback
+							isGrouped: true,
+							gamesCount: totalGames,
+							playersCount: usernames.length,
+							solvedCount: solvedGames,
+							avgAttempts: avgAttempts,
+							notificationIds: notificationIds,
+							description:
+								usernames.length === 1
+									? `${usernames[0]} a joué`
+									: `${usernames.join(", ")} ont joués`,
 						},
 					};
 				}
@@ -1246,6 +1273,7 @@ export const getAllServerNotifications = async (
 							solved: notification.solved,
 							timeToComplete: notification.timeToComplete,
 							notificationId: notification._id.toString(),
+							description: `${notification.username} a joué`,
 						},
 					};
 				}
@@ -1299,28 +1327,55 @@ export const getAllServerNotifications = async (
 							solvedCount: solvedGames,
 							avgAttempts: avgAttempts,
 							notificationIds: notificationIds,
+							description: `${usernames.join(", ")} ont joués`,
 						},
 					};
 				} catch (error) {
 					console.error("Erreur lors de la combinaison des images:", error);
 
-					const notification = serverNotifications[0];
+					// Fallback pour groupe avec données de base
+					const usernames = [
+						...new Set(serverNotifications.map((n) => n.username)),
+					];
+					const notificationIds = serverNotifications.map((n) =>
+						n._id.toString(),
+					);
+
+					// Grille combinée avec noms même en fallback
+					const combinedGrid = serverNotifications
+						.map((notif) => `${notif.username}:\n${notif.grid}`)
+						.join("\n\n");
+
+					// Stats groupées même en fallback
+					const totalGames = serverNotifications.length;
+					const solvedGames = serverNotifications.filter(
+						(n) => n.solved,
+					).length;
+					const totalAttempts = serverNotifications.reduce(
+						(sum, n) => sum + n.attempts,
+						0,
+					);
+					const avgAttempts =
+						Math.round((totalAttempts / totalGames) * 10) / 10;
+
 					return {
 						serverId: server.serverId,
 						channelId: server.wordleChannelId,
 						notificationData: {
-							username: notification.username,
-							avatar: notification.avatar || undefined,
-							grid: notification.grid,
-							image: notification.image,
-							attempts: notification.attempts,
-							time: notification.time || "0:00",
-							streak: notification.streak,
-							puzzle: notification.puzzle,
-							date: notification.date,
-							solved: notification.solved,
-							timeToComplete: notification.timeToComplete,
-							notificationId: notification._id.toString(),
+							username: usernames.join(", "),
+							avatar: undefined,
+							grid: combinedGrid,
+							image: undefined, // Pas d'image en fallback
+							isGrouped: true,
+							gamesCount: totalGames,
+							playersCount: usernames.length,
+							solvedCount: solvedGames,
+							avgAttempts: avgAttempts,
+							notificationIds: notificationIds,
+							description:
+								usernames.length === 1
+									? `${usernames[0]} a joué`
+									: `${usernames.join(", ")} ont joués`,
 						},
 					};
 				}

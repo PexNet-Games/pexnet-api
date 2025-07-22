@@ -495,6 +495,81 @@ export const generateResultImage = async (req: Request, res: Response) => {
 			attempts,
 		);
 
+		// Generate images for guild members who played the same word
+		const closeMembersImg: Array<{
+			discordId: string;
+			username: string;
+			image: string;
+			solved: boolean;
+			attempts: number;
+		}> = [];
+
+		try {
+			// If user has guilds, find other members who played the same word
+			if (user.guilds && user.guilds.length > 0) {
+				// Find all other users from the same guilds who played this wordId
+				const guildMembers = await User.find({
+					guilds: { $in: user.guilds },
+					discordId: { $ne: discordId }, // Exclude the requesting user
+				}).select("discordId username avatar discriminator");
+
+				// Get their game stats for this word
+				const memberGameStats = await WordleGameStats.find({
+					discordId: { $in: guildMembers.map((m) => m.discordId) },
+					wordId: wordId,
+				});
+
+				// Generate images for each member who played
+				for (const memberStats of memberGameStats) {
+					const memberUser = guildMembers.find(
+						(u) => u.discordId === memberStats.discordId,
+					);
+					if (!memberUser) continue;
+
+					try {
+						// Ensure safe string values for required fields
+						const safeUsername = memberUser.username
+							? memberUser.username
+							: "Unknown User";
+
+						const memberResultData: WordleResultData = {
+							guesses: memberStats.guesses,
+							targetWord: dailyWord.word,
+							solved: memberStats.solved,
+							attempts: memberStats.attempts,
+							discordId: memberUser.discordId ?? "",
+							username: safeUsername,
+							discriminator: memberUser.discriminator || undefined,
+							avatar: memberUser.avatar || undefined,
+						};
+
+						const memberImageBuffer =
+							await generateWordleResultImage(memberResultData);
+
+						closeMembersImg.push({
+							discordId: memberUser.discordId ?? "",
+							username: safeUsername,
+							image: memberImageBuffer.toString("base64"),
+							solved: memberStats.solved,
+							attempts: memberStats.attempts,
+						});
+					} catch (memberError) {
+						console.warn(
+							`⚠️ Erreur génération image pour membre ${memberUser.discordId}:`,
+							memberError,
+						);
+						// Continue with other members if one fails
+					}
+				}
+			}
+		} catch (guildError) {
+			console.warn(
+				"⚠️ Erreur lors de la récupération des images des membres:",
+				guildError,
+			);
+			// Continue without guild member images if this fails
+		}
+
 		// Return JSON with both image and text, including timeToComplete from database
 		res.json({
 			success: true,
@@ -504,6 +579,7 @@ export const generateResultImage = async (req: Request, res: Response) => {
 			solved,
 			attempts,
 			timeToComplete: gameStats.timeToComplete,
+			closeMembersImg,
 		});
 	} catch (error) {
 		console.error("Error generating result image:", error);
