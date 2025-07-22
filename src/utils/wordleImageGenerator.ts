@@ -22,7 +22,7 @@ export interface LetterResult {
 export async function generateWordleResultImage(
 	data: WordleResultData,
 ): Promise<Buffer> {
-	// Calculate dynamic dimensions based on content
+	// Fixed dimensions for consistent layout
 	const SQUARE_SIZE = 40;
 	const SQUARE_GAP = 2;
 	const AVATAR_SIZE = 180;
@@ -34,16 +34,15 @@ export async function generateWordleResultImage(
 	const GRID_HEIGHT =
 		data.guesses.length * SQUARE_SIZE + (data.guesses.length - 1) * SQUARE_GAP;
 
-	// Calculate canvas dimensions to fit content
+	// Fixed canvas dimensions - hauteur augmentée pour 6 tentatives
 	const CANVAS_WIDTH = Math.max(GRID_WIDTH, AVATAR_SIZE) + 2 * PADDING;
-	const CANVAS_HEIGHT =
-		AVATAR_SIZE + VERTICAL_SPACING + GRID_HEIGHT + 2 * PADDING;
+	const CANVAS_HEIGHT = 508; // Hauteur fixe augmentée de 50px pour éviter la coupe
 
-	// Calculate centered positions
+	// Calculate positions alignées en haut (top-aligned)
 	const AVATAR_X = (CANVAS_WIDTH - AVATAR_SIZE) / 2;
-	const AVATAR_Y = PADDING;
+	const AVATAR_Y = PADDING; // Aligné en haut
 	const GRID_START_X = (CANVAS_WIDTH - GRID_WIDTH) / 2;
-	const GRID_START_Y = AVATAR_Y + AVATAR_SIZE + VERTICAL_SPACING;
+	const GRID_START_Y = AVATAR_Y + AVATAR_SIZE + VERTICAL_SPACING; // Juste en dessous de l'avatar
 
 	// Colors (custom Pexnet colors)
 	const COLORS = {

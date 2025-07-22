@@ -4,6 +4,7 @@ import {
 	leaveServer,
 	updateServerUsers,
 	getCommonServers,
+	getAllServerNotifications,
 	getActiveUsersWithNotifications,
 	setWordleChannel,
 	getActiveServers,
@@ -269,13 +270,66 @@ router.put("/servers/:serverId/users", updateServerUsers);
  *                             description: Temps en millisecondes
  *                           notificationId:
  *                             type: string
- *                             description: ID de la notification à marquer comme traitée
+ *                             description: ID de la notification à marquer comme traitée (notification unique)
+ *                           isGrouped:
+ *                             type: boolean
+ *                             description: Indique si cette notification regroupe plusieurs jeux
+ *                           gamesCount:
+ *                             type: number
+ *                             description: Nombre de jeux groupés (si isGrouped=true)
+ *                           playersCount:
+ *                             type: number
+ *                             description: Nombre de joueurs différents (si isGrouped=true)
+ *                           solvedCount:
+ *                             type: number
+ *                             description: Nombre de jeux résolus (si isGrouped=true)
+ *                           avgAttempts:
+ *                             type: number
+ *                             description: Moyenne des tentatives (si isGrouped=true)
+ *                           notificationIds:
+ *                             type: array
+ *                             items:
+ *                               type: string
+ *                             description: IDs des notifications pour marquage (notification groupée)
  *       400:
  *         description: discordId manquant
  *       500:
  *         description: Erreur serveur
  */
 router.get("/users/:discordId/common-servers", getCommonServers);
+
+/**
+ * @swagger
+ * /api/discord/servers/notifications:
+ *   get:
+ *     summary: Obtenir toutes les notifications groupées par serveur
+ *     tags: [Discord - Notifications]
+ *     description: Récupère toutes les notifications Wordle groupées par serveur. Évite la duplication lors des appels multiples.
+ *     responses:
+ *       200:
+ *         description: Notifications groupées par serveur
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 servers:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       serverId:
+ *                         type: string
+ *                         description: ID du serveur Discord
+ *                       channelId:
+ *                         type: string
+ *                         description: ID du canal de notification
+ *                       notificationData:
+ *                         $ref: '#/components/schemas/NotificationData'
+ *       500:
+ *         description: Erreur serveur
+ */
+router.get("/servers/notifications", getAllServerNotifications);
 
 /**
  * @swagger

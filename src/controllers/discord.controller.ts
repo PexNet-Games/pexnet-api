@@ -7,6 +7,24 @@ import WordleDailyWord from "@models/WordleDailyWord";
 import WordlePendingNotification from "@models/WordlePendingNotification";
 import User from "@models/User";
 import { generateWordleResultImage } from "@utils/wordleImageGenerator";
+import { combineBase64ImagesSideBySide } from "@utils/imageComposer";
+
+// Cache pour éviter la duplication des notifications dans la même session
+const processedNotificationCache = new Map<string, number>();
+
+/**
+ * Nettoyer le cache des notifications (expire après 2 minutes)
+ */
+function cleanNotificationCache() {
+	const now = Date.now();
+	const expireTime = 2 * 60 * 1000; // 2 minutes
+
+	for (const [key, timestamp] of processedNotificationCache.entries()) {
+		if (now - timestamp > expireTime) {
+			processedNotificationCache.delete(key);
+		}
+	}
+}
 
 /**
  * Construire l'URL de base pour l'API du bot Discord
@@ -322,8 +340,8 @@ export const updateServerUsers = async (req: Request, res: Response) => {
 };
 
 /**
- * Obtenir les serveurs communs avec notifications en attente pour un utilisateur
- * Format attendu par le bot Discord pour le WordleNotificationJob
+ * Obtenir les serveurs communs entre le bot et un utilisateur
+ * NOUVELLE LOGIQUE: Grouper toutes les notifications par serveur (pas par utilisateur)
  */
 export const getCommonServers = async (req: Request, res: Response) => {
 	try {
@@ -336,6 +354,9 @@ export const getCommonServers = async (req: Request, res: Response) => {
 			});
 		}
 
+		// Nettoyer le cache périodiquement
+		cleanNotificationCache();
+
 		// Récupérer l'utilisateur et vérifier ses guilds
 		const user = await User.findOne({ discordId }).select(
 			"guilds guildsLastSync username",
@@ -347,19 +368,8 @@ export const getCommonServers = async (req: Request, res: Response) => {
 			});
 		}
 
-		// Récupérer les notifications en attente pour cet utilisateur
-		const pendingNotifications = await WordlePendingNotification.find({
-			discordId,
-			isProcessed: false,
-		});
-
-		if (pendingNotifications.length === 0) {
-			return res.json({
-				servers: [],
-			});
-		}
-
-		// Récupérer les serveurs communs avec canal Wordle configuré
+		// NOUVELLE LOGIQUE: Récupérer TOUTES les notifications en attente (tous utilisateurs)
+		// pour les serveurs où cet utilisateur est présent
 		const commonServers = await DiscordServer.find({
 			serverId: { $in: user.guilds },
 			isActive: true,
@@ -373,39 +383,184 @@ export const getCommonServers = async (req: Request, res: Response) => {
 			});
 		}
 
-		// Construire la réponse dans le format attendu par le bot Discord
-		const servers = [];
+		// Récupérer TOUTES les notifications en attente (tous utilisateurs)
+		const allPendingNotifications = await WordlePendingNotification.find({
+			isProcessed: false,
+			expiresAt: { $gt: new Date() },
+		});
 
-		for (const server of commonServers) {
-			for (const notification of pendingNotifications) {
-				servers.push({
-					serverId: server.serverId,
-					channelId: server.wordleChannelId,
-					notificationData: {
-						username: notification.username,
-						avatar: notification.avatar || undefined,
-						grid: notification.grid,
-						image: notification.image, // Image PNG en base64
-						attempts: notification.attempts,
-						time: notification.time || "0:00",
-						streak: notification.streak,
-						puzzle: notification.puzzle,
-						date: notification.date,
-						solved: notification.solved,
-						timeToComplete: notification.timeToComplete,
-						// ID de la notification pour la marquer comme traitée
-						notificationId: notification._id.toString(),
-					},
-				});
-			}
+		if (allPendingNotifications.length === 0) {
+			return res.json({
+				servers: [],
+			});
 		}
 
+		// Grouper les notifications par serveur et combiner les images
+		const servers = await Promise.all(
+			commonServers.map(async (server) => {
+				// Créer une clé de cache pour ce serveur
+				const cacheKey = `server_${server.serverId}`;
+				const now = Date.now();
+
+				// Vérifier si ce serveur a déjà été traité récemment
+				if (processedNotificationCache.has(cacheKey)) {
+					const lastProcessed = processedNotificationCache.get(cacheKey)!;
+					// Si traité il y a moins de 1 minute, ignorer
+					if (now - lastProcessed < 60 * 1000) {
+						console.log(`🔄 Serveur ${server.serverId} déjà traité, ignoré`);
+						return null;
+					}
+				}
+
+				// Trouver toutes les notifications pour ce serveur
+				// (vérifier que les utilisateurs sont membres du serveur)
+				const serverNotifications = [];
+				for (const notification of allPendingNotifications) {
+					const notifUser = await User.findOne({
+						discordId: notification.discordId,
+					}).select("guilds");
+
+					// Vérifier si l'utilisateur est membre de ce serveur
+					if (
+						notifUser &&
+						notifUser.guilds &&
+						notifUser.guilds.includes(server.serverId)
+					) {
+						serverNotifications.push(notification);
+					}
+				}
+
+				// Si pas de notifications pour ce serveur
+				if (serverNotifications.length === 0) {
+					return null; // Sera filtré plus tard
+				}
+
+				// Marquer ce serveur comme traité dans le cache
+				processedNotificationCache.set(cacheKey, now);
+
+				// Si une seule notification, traitement normal
+				if (serverNotifications.length === 1) {
+					const notification = serverNotifications[0];
+					return {
+						serverId: server.serverId,
+						channelId: server.wordleChannelId,
+						notificationData: {
+							username: notification.username,
+							avatar: notification.avatar || undefined,
+							grid: notification.grid,
+							image: notification.image,
+							attempts: notification.attempts,
+							time: notification.time || "0:00",
+							streak: notification.streak,
+							puzzle: notification.puzzle,
+							date: notification.date,
+							solved: notification.solved,
+							timeToComplete: notification.timeToComplete,
+							notificationId: notification._id.toString(),
+						},
+					};
+				}
+
+				// Plusieurs notifications : combiner les images et créer une notification groupée
+				try {
+					// Extraire les images qui existent
+					const images = serverNotifications
+						.filter((notif) => notif.image)
+						.map((notif) => notif.image!);
+
+					let combinedImage: string | undefined;
+					if (images.length > 0) {
+						combinedImage = await combineBase64ImagesSideBySide(images);
+					}
+
+					// Créer une grille combinée avec nom d'utilisateur + grille
+					const combinedGrid = serverNotifications
+						.map((notif) => `${notif.username}:\n${notif.grid}`)
+						.join("\n\n");
+
+					// Créer une liste des utilisateurs
+					const usernames = [
+						...new Set(serverNotifications.map((n) => n.username)),
+					];
+					const notificationIds = serverNotifications.map((n) =>
+						n._id.toString(),
+					);
+
+					// Calculer les stats groupées
+					const totalGames = serverNotifications.length;
+					const solvedGames = serverNotifications.filter(
+						(n) => n.solved,
+					).length;
+					const totalAttempts = serverNotifications.reduce(
+						(sum, n) => sum + n.attempts,
+						0,
+					);
+					const avgAttempts =
+						Math.round((totalAttempts / totalGames) * 10) / 10;
+
+					return {
+						serverId: server.serverId,
+						channelId: server.wordleChannelId,
+						notificationData: {
+							username: usernames.join(", "), // Plusieurs utilisateurs
+							avatar: undefined, // Pas d'avatar pour les groupes multi-utilisateurs
+							grid: combinedGrid,
+							image: combinedImage,
+							// Pour les notifications groupées, pas de stats individuelles
+							isGrouped: true,
+							gamesCount: totalGames,
+							playersCount: usernames.length,
+							solvedCount: solvedGames,
+							avgAttempts: avgAttempts,
+							// IDs de toutes les notifications à marquer comme traitées
+							notificationIds: notificationIds,
+						},
+					};
+				} catch (error) {
+					console.error("Erreur lors de la combinaison des images:", error);
+
+					// En cas d'erreur, retourner la première notification seulement
+					const notification = serverNotifications[0];
+					return {
+						serverId: server.serverId,
+						channelId: server.wordleChannelId,
+						notificationData: {
+							username: notification.username,
+							avatar: notification.avatar || undefined,
+							grid: notification.grid,
+							image: notification.image,
+							attempts: notification.attempts,
+							time: notification.time || "0:00",
+							streak: notification.streak,
+							puzzle: notification.puzzle,
+							date: notification.date,
+							solved: notification.solved,
+							timeToComplete: notification.timeToComplete,
+							notificationId: notification._id.toString(),
+						},
+					};
+				}
+			}),
+		);
+
+		// Filtrer les serveurs null (pas de notifications)
+		const filteredServers = servers.filter((server) => server !== null);
+
+		const totalNotifications = filteredServers.reduce((sum, server) => {
+			return (
+				sum +
+				(server.notificationData.isGrouped
+					? server.notificationData.gamesCount
+					: 1)
+			);
+		}, 0);
+
 		console.log(
-			`📤 ${servers.length} notifications envoyées pour ${user.username || discordId} vers ${commonServers.length} serveurs`,
+			`📤 ${totalNotifications} notifications groupées en ${filteredServers.length} serveur(s)`,
 		);
 
 		res.json({
-			servers,
+			servers: filteredServers,
 		});
 	} catch (error) {
 		console.error(
@@ -1008,6 +1163,196 @@ export const getActiveUsersWithNotifications = async (
 			success: false,
 			users: [],
 			count: 0,
+			error: "Erreur interne du serveur",
+		});
+	}
+};
+
+/**
+ * Obtenir toutes les notifications groupées par serveur
+ * NOUVEAU: Évite la duplication en groupant directement par serveur
+ */
+export const getAllServerNotifications = async (
+	req: Request,
+	res: Response,
+) => {
+	try {
+		// Récupérer toutes les notifications en attente
+		const allPendingNotifications = await WordlePendingNotification.find({
+			isProcessed: false,
+			expiresAt: { $gt: new Date() },
+		});
+
+		if (allPendingNotifications.length === 0) {
+			return res.json({
+				servers: [],
+			});
+		}
+
+		// Récupérer tous les serveurs actifs avec canal Wordle configuré
+		const activeServers = await DiscordServer.find({
+			isActive: true,
+			wordleChannelId: { $exists: true, $ne: null },
+			"settings.autoNotify": { $ne: false },
+		}).select("serverId wordleChannelId");
+
+		if (activeServers.length === 0) {
+			return res.json({
+				servers: [],
+			});
+		}
+
+		// Grouper les notifications par serveur
+		const servers = await Promise.all(
+			activeServers.map(async (server) => {
+				// Trouver toutes les notifications pour ce serveur
+				const serverNotifications = [];
+				for (const notification of allPendingNotifications) {
+					const notifUser = await User.findOne({
+						discordId: notification.discordId,
+					}).select("guilds");
+
+					// Vérifier si l'utilisateur est membre de ce serveur
+					if (
+						notifUser &&
+						notifUser.guilds &&
+						notifUser.guilds.includes(server.serverId)
+					) {
+						serverNotifications.push(notification);
+					}
+				}
+
+				// Si pas de notifications pour ce serveur
+				if (serverNotifications.length === 0) {
+					return null;
+				}
+
+				// Si une seule notification, traitement normal
+				if (serverNotifications.length === 1) {
+					const notification = serverNotifications[0];
+					return {
+						serverId: server.serverId,
+						channelId: server.wordleChannelId,
+						notificationData: {
+							username: notification.username,
+							avatar: notification.avatar || undefined,
+							grid: notification.grid,
+							image: notification.image,
+							attempts: notification.attempts,
+							time: notification.time || "0:00",
+							streak: notification.streak,
+							puzzle: notification.puzzle,
+							date: notification.date,
+							solved: notification.solved,
+							timeToComplete: notification.timeToComplete,
+							notificationId: notification._id.toString(),
+						},
+					};
+				}
+
+				// Plusieurs notifications : combiner les images
+				try {
+					const images = serverNotifications
+						.filter((notif) => notif.image)
+						.map((notif) => notif.image!);
+
+					let combinedImage: string | undefined;
+					if (images.length > 0) {
+						combinedImage = await combineBase64ImagesSideBySide(images);
+					}
+
+					// Grille combinée avec noms
+					const combinedGrid = serverNotifications
+						.map((notif) => `${notif.username}:\n${notif.grid}`)
+						.join("\n\n");
+
+					const usernames = [
+						...new Set(serverNotifications.map((n) => n.username)),
+					];
+					const notificationIds = serverNotifications.map((n) =>
+						n._id.toString(),
+					);
+
+					// Stats groupées
+					const totalGames = serverNotifications.length;
+					const solvedGames = serverNotifications.filter(
+						(n) => n.solved,
+					).length;
+					const totalAttempts = serverNotifications.reduce(
+						(sum, n) => sum + n.attempts,
+						0,
+					);
+					const avgAttempts =
+						Math.round((totalAttempts / totalGames) * 10) / 10;
+
+					return {
+						serverId: server.serverId,
+						channelId: server.wordleChannelId,
+						notificationData: {
+							username: usernames.join(", "),
+							avatar: undefined,
+							grid: combinedGrid,
+							image: combinedImage,
+							isGrouped: true,
+							gamesCount: totalGames,
+							playersCount: usernames.length,
+							solvedCount: solvedGames,
+							avgAttempts: avgAttempts,
+							notificationIds: notificationIds,
+						},
+					};
+				} catch (error) {
+					console.error("Erreur lors de la combinaison des images:", error);
+
+					const notification = serverNotifications[0];
+					return {
+						serverId: server.serverId,
+						channelId: server.wordleChannelId,
+						notificationData: {
+							username: notification.username,
+							avatar: notification.avatar || undefined,
+							grid: notification.grid,
+							image: notification.image,
+							attempts: notification.attempts,
+							time: notification.time || "0:00",
+							streak: notification.streak,
+							puzzle: notification.puzzle,
+							date: notification.date,
+							solved: notification.solved,
+							timeToComplete: notification.timeToComplete,
+							notificationId: notification._id.toString(),
+						},
+					};
+				}
+			}),
+		);
+
+		// Filtrer les serveurs null
+		const filteredServers = servers.filter((server) => server !== null);
+
+		const totalNotifications = filteredServers.reduce((sum, server) => {
+			return (
+				sum +
+				(server.notificationData.isGrouped
+					? server.notificationData.gamesCount
+					: 1)
+			);
+		}, 0);
+
+		console.log(
+			`📤 ${totalNotifications} notifications groupées en ${filteredServers.length} serveur(s) [GLOBAL]`,
+		);
+
+		res.json({
+			servers: filteredServers,
+		});
+	} catch (error) {
+		console.error(
+			"Erreur lors de la récupération des notifications serveur:",
+			error,
+		);
+		res.status(500).json({
+			servers: [],
 			error: "Erreur interne du serveur",
 		});
 	}
